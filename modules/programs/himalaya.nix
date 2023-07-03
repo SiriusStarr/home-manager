@@ -11,6 +11,11 @@ let
   # make a himalaya config from a home-manager email account config
   mkAccountConfig = _: account:
     let
+      # Use notmuch if it's enabled, otherwise fallback to maildir then IMAP
+      notmuchEnabled = account.notmuch.enable;
+      maildirEnabled = !isNull account.maildir && !notmuchEnabled;
+      imapEnabled = !isNull account.imap && !maildirEnabled;
+
       globalConfig = {
         email = account.address;
         display-name = account.realName;
@@ -31,22 +36,26 @@ let
           signature-delim = account.signature.delimiter;
         };
 
-      imapConfig = lib.optionalAttrs (!isNull account.imap) (compactAttrs {
+      imapConfig = lib.optionalAttrs imapEnabled (compactAttrs {
         backend = "imap";
         imap-host = account.imap.host;
         imap-port = account.imap.port;
         imap-ssl = account.imap.tls.enable;
         imap-starttls = account.imap.tls.useStartTls;
         imap-login = account.userName;
-        imap-passwd-cmd = builtins.concatStringsSep " " account.passwordCommand;
+        imap-auth = "passwd";
+        imap-passwd.cmd = builtins.concatStringsSep " " account.passwordCommand;
       });
 
-      maildirConfig =
-        lib.optionalAttrs (isNull account.imap && !isNull account.maildir)
-        (compactAttrs {
-          backend = "maildir";
-          maildir-root-dir = account.maildir.absPath;
-        });
+      maildirConfig = lib.optionalAttrs maildirEnabled (compactAttrs {
+        backend = "maildir";
+        maildir-root-dir = account.maildir.absPath;
+      });
+
+      notmuchConfig = lib.optionalAttrs notmuchEnabled (compactAttrs {
+        backend = "notmuch";
+        notmuch-db-path = account.maildir.absPath;
+      });
 
       smtpConfig = lib.optionalAttrs (!isNull account.smtp) (compactAttrs {
         sender = "smtp";
@@ -55,14 +64,18 @@ let
         smtp-ssl = account.smtp.tls.enable;
         smtp-starttls = account.smtp.tls.useStartTls;
         smtp-login = account.userName;
-        smtp-passwd-cmd = builtins.concatStringsSep " " account.passwordCommand;
+        smtp-auth = "passwd";
+        smtp-passwd.cmd = builtins.concatStringsSep " " account.passwordCommand;
       });
 
       sendmailConfig =
-        lib.optionalAttrs (isNull account.smtp) { sender = "sendmail"; };
+        lib.optionalAttrs (isNull account.smtp && !isNull account.msmtp) {
+          sender = "sendmail";
+          sendmail-cmd = "${pkgs.msmtp}/bin/msmtp";
+        };
 
       config = globalConfig // signatureConfig // imapConfig // maildirConfig
-        // smtpConfig // sendmailConfig;
+        // notmuchConfig // smtpConfig // sendmailConfig;
 
     in lib.recursiveUpdate config account.himalaya.settings;
 
