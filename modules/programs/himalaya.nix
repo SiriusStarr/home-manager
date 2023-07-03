@@ -8,6 +8,8 @@ let
   # attrs util that removes entries containing a null value
   compactAttrs = lib.filterAttrs (_: val: !isNull val);
 
+  maildirBasePath = config.accounts.email.maildirBasePath;
+
   # make a himalaya config from a home-manager email account config
   mkAccountConfig = _: account:
     let
@@ -54,7 +56,7 @@ let
 
       notmuchConfig = lib.optionalAttrs notmuchEnabled (compactAttrs {
         backend = "notmuch";
-        notmuch-db-path = account.maildir.absPath;
+        notmuch-db-path = maildirBasePath;
       });
 
       smtpConfig = lib.optionalAttrs (!isNull account.smtp) (compactAttrs {
